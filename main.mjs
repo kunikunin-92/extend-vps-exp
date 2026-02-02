@@ -38,6 +38,22 @@ try {
     const body = await page.$eval('img[src^="data:"]', img => img.src)
     const code = await fetch('https://captcha-120546510085.asia-northeast1.run.app', { method: 'POST', body }).then(r => r.text())
     await page.locator('[placeholder="上の画像の数字を入力"]').fill(code)
+        // ここにCloudflareチェックボックスの処理を追加
+    await setTimeout(2000) // 少し待つ
+    
+    // Cloudflare Turnstileのiframe内のチェックボックスをクリック
+    const turnstileFrame = page.frames().find(frame => 
+        frame.url().includes('challenges.cloudflare.com')
+    )
+    
+    if (turnstileFrame) {
+        await turnstileFrame.locator('input[type="checkbox"]').click()
+        await setTimeout(3000) // Cloudflareの検証を待つ
+    } else {
+        // iframeが見つからない場合は、ページ上のチェックボックスを探す
+        await page.locator('input[type="checkbox"]').click()
+        await setTimeout(3000)
+    }
     await page.locator('text=無料VPSの利用を継続する').click()
 } catch (e) {
     console.error(e)
