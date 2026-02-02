@@ -13,6 +13,7 @@ jobs:
       - uses: actions/setup-node@v4
       - run: sudo apt-get -qq update && sudo apt-get -yqq install --no-install-recommends ffmpeg fonts-noto-cjk
       - run: yarn add puppeteer
+      - run: npm install
       - run: node main.mjs
         env:
           EMAIL: ${{ secrets.EMAIL }}
