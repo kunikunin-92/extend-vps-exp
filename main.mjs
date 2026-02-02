@@ -38,64 +38,94 @@ try {
     // Cloudflareチェックボックスの処理
     await setTimeout(2000)
     
-    // 方法1: iframe内を探す
     try {
+        console.log('Cloudflare Turnstileの処理開始')
+        
+        // Cloudflareのiframeを探す
         const frames = page.frames()
-        console.log('利用可能なフレーム数:', frames.length)
-        
-        for (const frame of frames) {
-            console.log('フレームURL:', frame.url())
-        }
-        
-        // Cloudflare Turnstileのiframeを探す
-        const cfFrame = frames.find(f => 
-            f.url().includes('cloudflare') || 
-            f.url().includes('turnstile') ||
-            f.url().includes('challenges')
-        )
+        const cfFrame = frames.find(f => f.url().includes('challenges.cloudflare.com'))
         
         if (cfFrame) {
             console.log('Cloudflareフレーム発見:', cfFrame.url())
-            // iframeが読み込まれるまで待つ
-            await setTimeout(2000)
             
-            // チェックボックスまたはクリック可能な要素を探す
-            const checkboxSelector = 'input[type="checkbox"], label, div[role="checkbox"]'
-            await cfFrame.waitForSelector(checkboxSelector, { timeout: 10000 })
-            await cfFrame.click(checkboxSelector)
-            console.log('Cloudflareチェックボックスをクリックしました')
-            await setTimeout(3000)
-        } else {
-            console.log('Cloudflareフレームが見つかりません、ページ上で探します')
+            // iframe内のbodyが読み込まれるまで待つ
+            await cfFrame.waitForSelector('body', { timeout: 10000 })
+            console.log('フレームのbodyが読み込まれました')
             
-            // 方法2: ページ上で直接探す
-            const selectors = [
-                'input[type="checkbox"]',
-                'iframe[src*="cloudflare"]',
-                'iframe[src*="turnstile"]',
-                'div.cf-turnstile',
-                '#cf-turnstile',
-                '[id*="turnstile"]',
-                '[class*="turnstile"]'
+            // フレーム内の全要素を取得してみる
+            const elements = await cfFrame.evaluate(() => {
+                return {
+                    html: document.body.innerHTML.substring(0, 500),
+                    clickableElements: Array.from(document.querySelectorAll('*'))
+                        .filter(el => el.offsetWidth > 0 && el.offsetHeight > 0)
+                        .map(el => ({
+                            tag: el.tagName,
+                            id: el.id,
+                            className: el.className,
+                            type: el.type
+                        }))
+                        .slice(0, 10) // 最初の10個だけ
+                }
+            })
+            console.log('フレーム内のHTML:', elements.html)
+            console.log('クリック可能な要素:', JSON.stringify(elements.clickableElements))
+            
+            // 色々な方法でクリックを試す
+            const clickAttempts = [
+                // 方法1: body全体をクリック
+                async () => {
+                    console.log('試行: bodyをクリック')
+                    await cfFrame.click('body')
+                },
+                // 方法2: 中央をクリック
+                async () => {
+                    console.log('試行: 中央座標をクリック')
+                    const box = await cfFrame.evaluate(() => {
+                        const body = document.body
+                        return {
+                            x: body.offsetWidth / 2,
+                            y: body.offsetHeight / 2
+                        }
+                    })
+                    await cfFrame.click('body', { offset: { x: box.x, y: box.y } })
+                },
+                // 方法3: divやspanをクリック
+                async () => {
+                    console.log('試行: div/spanをクリック')
+                    const selectors = ['div', 'span', 'label']
+                    for (const sel of selectors) {
+                        try {
+                            await cfFrame.click(sel)
+                            console.log(`${sel}をクリック成功`)
+                            break
+                        } catch (e) {
+                            // 次へ
+                        }
+                    }
+                }
             ]
             
-            for (const selector of selectors) {
+            // 各方法を順番に試す
+            for (const attempt of clickAttempts) {
                 try {
-                    await page.waitForSelector(selector, { timeout: 5000 })
-                    console.log(`セレクタ ${selector} が見つかりました`)
-                    await page.click(selector)
-                    await setTimeout(3000)
+                    await attempt()
+                    console.log('クリック成功、検証を待機中...')
+                    await setTimeout(5000) // Cloudflareの検証を待つ
                     break
-                } catch (e) {
-                    console.log(`セレクタ ${selector} が見つかりませんでした`)
+                } catch (err) {
+                    console.log('この方法は失敗:', err.message)
                 }
             }
+            
+        } else {
+            console.log('Cloudflareフレームが見つかりません')
         }
     } catch (err) {
         console.error('Cloudflareチェック処理でエラー:', err.message)
-        // エラーでも続行を試みる
     }
     
+    // 最後のボタンをクリック
+    await setTimeout(2000)
     await page.locator('text=無料VPSの利用を継続する').click()
 } catch (e) {
     console.error(e)
